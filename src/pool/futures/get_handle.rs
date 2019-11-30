@@ -1,10 +1,11 @@
 use std::{future::Future, pin::Pin};
 
-use futures_core::{task::Context, Poll};
+use futures_core::{task::Context};
 
 use pin_project::pin_project;
 
 use crate::{errors::Result, pool::Pool, ClientHandle};
+use std::task::Poll;
 
 /// Future that resolves to a `ClientHandle`.
 #[pin_project]

@@ -6,23 +6,26 @@ use std::{
 };
 
 use futures_core::future::BoxFuture;
+use futures::future::select_ok;
+
 #[cfg(feature = "tls")]
 use futures_util::FutureExt;
-use futures_util::{try_future::{select_ok, SelectOk}, TryFutureExt};
+
+use futures_util::{TryFutureExt};
 
 #[cfg(feature = "tls")]
 use native_tls::TlsConnector;
-#[cfg(feature = "tokio_io")]
-use tokio::net::TcpStream;
-#[cfg(feature = "async_std")]
-use async_std::net::TcpStream;
 
 use pin_project::{pin_project, project};
 use url::Url;
 
 use crate::{errors::ConnectionError, io::Stream as InnerStream, Options};
+
 #[cfg(feature = "tls")]
 use tokio_tls::TlsStream;
+
+use futures::future::SelectOk;
+use async_std::net::TcpStream;
 
 type Result<T> = std::result::Result<T, ConnectionError>;
 

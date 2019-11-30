@@ -95,7 +95,6 @@
 //!     Ok(())
 //! }
 //! ```
-
 #![recursion_limit = "1024"]
 
 use std::{fmt, future::Future, time::Duration};
@@ -103,8 +102,6 @@ use std::{fmt, future::Future, time::Duration};
 use futures_core::{future::BoxFuture, stream::BoxStream};
 use futures_util::{future, future::FutureExt, stream, StreamExt};
 use log::info;
-#[cfg(feature = "tokio_io")]
-use tokio::timer::Timeout;
 
 use crate::{
     connecting_stream::ConnectingStream,
@@ -504,7 +501,6 @@ impl ClientHandle {
     }
 }
 
-#[cfg(feature = "async_std")]
 async fn with_timeout<F, T>(future: F, duration: Duration) -> F::Output
 where
     F: Future<Output = Result<T>>,
@@ -514,18 +510,6 @@ where
     Ok(io::timeout(duration, async move {
         Ok(future.await?)
     }).await?)
-}
-
-#[cfg(not(feature = "async_std"))]
-async fn with_timeout<F, T>(future: F, timeout: Duration) -> F::Output
-where
-    F: Future<Output = Result<T>>,
-{
-    match Timeout::new(future, timeout).await {
-        Ok(Ok(c)) => Ok(c),
-        Ok(Err(err)) => Err(err),
-        Err(err) => Err(err.into()),
-    }
 }
 
 #[cfg(test)]
