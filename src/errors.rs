@@ -1,8 +1,6 @@
 use std::{borrow::Cow, io, mem, result, str::Utf8Error, string::FromUtf8Error};
 
 use failure::*;
-#[cfg(feature = "tokio_io")]
-use tokio::timer::timeout::Elapsed;
 use url::ParseError;
 use log::warn;
 use std::task::Poll;

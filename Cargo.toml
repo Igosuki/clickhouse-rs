@@ -23,6 +23,7 @@ futures-util = "0.3.1"
 futures = "0.3.1"
 tokio = { version = "0.2.2", features = ["tcp", "net", "sync", "full", "time"] }
 async-std = { version = "1.2.0", features = ["unstable"] }
+broadcaster = "^0.3.0"
 
 pin-project = "0.4.5"
 

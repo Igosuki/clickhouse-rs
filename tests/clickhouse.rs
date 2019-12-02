@@ -2,7 +2,7 @@ use std::{env, f64::EPSILON, fmt, sync::{Arc, atomic::{Ordering, AtomicUsize}}};
 
 use chrono::prelude::*;
 use chrono_tz::Tz;
-use futures_util::{future, stream::StreamExt, try_stream::TryStreamExt};
+use futures_util::{future, stream::StreamExt, TryStreamExt};
 
 use clickhouse_rs::{
     errors::Error,
@@ -230,7 +230,7 @@ async fn test_select() -> Result<(), Error> {
 }
 
 #[test]
-fn test_simple_select() {
+fn test_simple_select_std() {
     use async_std::task;
 
     async fn execute() -> Result<(), Error> {
@@ -248,7 +248,7 @@ fn test_simple_select() {
 }
 
 #[tokio::test]
-async fn test_simple_select() -> Result<(), Error> {
+async fn test_simple_select_tokio() -> Result<(), Error> {
     let pool = Pool::new(database_url());
     let mut c = pool.get_handle().await?;
     let actual = c.query("SELECT a FROM (SELECT 1 AS a UNION ALL SELECT 2 AS a UNION ALL SELECT 3 AS a) ORDER BY a ASC").fetch_all().await?;
@@ -828,7 +828,7 @@ fn test_reconnect() {
     for _ in 0..2 {
         let pool = pool.clone();
         let counter = counter.clone();
-        let rt = tokio::runtime::Runtime::new().unwrap();
+        let mut rt = tokio::runtime::Runtime::new().unwrap();
         let ret: Result<(), Error> = rt.block_on(async move {
             let mut client = pool.get_handle().await?;
 
@@ -842,122 +842,4 @@ fn test_reconnect() {
     }
 
     assert_eq!(2, counter.load(Ordering::SeqCst))
-}
-
-#[test]
-fn test_reconnect() {
-    let counter = Arc::new(AtomicUsize::new(0));
-
-    let url = format!("{}{}", database_url(), "&pool_max=1&pool_min=1");
-    let pool = Pool::new(url);
-
-    for _ in 0..2 {
-        let counter = counter.clone();
-        let done = pool
-            .get_handle()
-            .and_then(move |c| c.query("SELECT 1").fetch_all())
-            .and_then(move |(_, block)| {
-                let value: u8 = block.get(0, 0)?;
-                counter.fetch_add(value as usize, Ordering::SeqCst);
-                Ok(())
-            })
-            .map_err(|err| eprintln!("database error: {}", err));
-
-        run(done).unwrap();
-    }
-
-    assert_eq!(2, counter.load(Ordering::SeqCst))
-}
-
-#[test]
-fn test_column_iter() {
-    let ddl = r"
-        CREATE TABLE clickhouse_test_column_iter (
-            uint64    UInt64,
-            str       String,
-            fixed_str FixedString(1),
-            opt_str   Nullable(String),
-            date      Date,
-            datetime  DateTime,
-            decimal   Decimal(8, 3),
-            array     Array(UInt32)
-        ) Engine=Memory";
-
-    let query = r"SELECT * FROM clickhouse_test_column_iter";
-
-    let date_value: Date<Tz> = UTC.ymd(2016, 10, 22);
-    let date_time_value: DateTime<Tz> = UTC.ymd(2014, 7, 8).and_hms(14, 0, 0);
-
-    let block = Block::new()
-        .add_column("uint64", vec![1_u64, 2, 3])
-        .add_column("str", vec!["A", "B", "C"])
-        .add_column("fixed_str", vec!["A", "B", "C"])
-        .add_column("opt_str", vec![Some("A"), None, None])
-        .add_column("date", vec![date_value, date_value, date_value])
-        .add_column(
-            "datetime",
-            vec![date_time_value, date_time_value, date_time_value],
-        )
-        .add_column(
-            "decimal",
-            vec![Decimal::of(1.234, 3), Decimal::of(5, 3), Decimal::of(5, 3)],
-        )
-        .add_column("array", vec![vec![42_u32], Vec::new(), Vec::new()]);
-
-    let pool = Pool::new(database_url());
-
-    let done = pool.get_handle()
-        .and_then(move |c| c.execute("DROP TABLE IF EXISTS clickhouse_test_column_iter"))
-        .and_then(move |c| c.execute(ddl))
-        .and_then(move |c| c.insert("clickhouse_test_column_iter", block))
-        .and_then(move |c| {
-            c.query(query)
-                .stream_blocks()
-                .for_each(move |block| {
-                    let uint64_iter: Vec<_> = block
-                        .get_column("uint64")?
-                        .iter::<u64>()?
-                        .copied()
-                        .collect();
-                    assert_eq!(uint64_iter, vec![1_u64, 2, 3]);
-
-                    let str_iter: Vec<_> = block.get_column("str")?.iter::<&[u8]>()?.collect();
-                    assert_eq!(str_iter, vec![&[65_u8], &[66], &[67]]);
-
-                    let fixed_str_iter: Vec<_> = block.get_column("fixed_str")?.iter::<&[u8]>()?.collect();
-                    assert_eq!(fixed_str_iter, vec![&[65_u8], &[66], &[67]]);
-
-                    let opt_str_iter: Vec<_> = block
-                        .get_column("opt_str")?
-                        .iter::<Option<&[u8]>>()?
-                        .collect();
-                    let expected: Vec<Option<&[u8]>> = vec![Some(&[65_u8]), None, None];
-                    assert_eq!(opt_str_iter, expected);
-
-                    let date_iter: Vec<_> = block.get_column("date")?.iter::<Date<Tz>>()?.collect();
-                    assert_eq!(date_iter, vec![date_value, date_value, date_value]);
-
-                    let datetime_iter: Vec<_> = block
-                        .get_column("datetime")?
-                        .iter::<DateTime<Tz>>()?
-                        .collect();
-                    assert_eq!(
-                        datetime_iter,
-                        vec![date_time_value, date_time_value, date_time_value]
-                    );
-
-                    let decimal_iter: Vec<_> = block.get_column("decimal")?.iter::<Decimal>()?.collect();
-                    assert_eq!(
-                        decimal_iter,
-                        vec![Decimal::of(1.234, 3), Decimal::of(5, 3), Decimal::of(5, 3)]
-                    );
-
-                    let array_iter: Vec<_> = block.get_column("array")?.iter::<Vec<u32>>()?.collect();
-                    assert_eq!(array_iter, vec![vec![&42_u32], Vec::new(), Vec::new()]);
-
-                    Ok(())
-                })
-        });
-
-    run(done).unwrap();
 }
