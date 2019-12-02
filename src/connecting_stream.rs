@@ -5,19 +5,19 @@ use std::{
     task::{Context, Poll},
 };
 
+use url::Url;
+
 use futures_core::future::BoxFuture;
 use futures::future::select_ok;
+use futures::future::*;
 
 #[cfg(feature = "tls")]
 use futures_util::FutureExt;
-
-use futures_util::{TryFutureExt};
 
 #[cfg(feature = "tls")]
 use native_tls::TlsConnector;
 
 use pin_project::{pin_project, project};
-use url::Url;
 
 use crate::{errors::ConnectionError, io::Stream as InnerStream, Options};
 
@@ -126,7 +126,7 @@ pub(crate) struct ConnectingStream {
 
 impl ConnectingStream {
     #[allow(unused_variables)]
-    pub(crate) fn new(addr: &Url, options: &Options) -> Self {
+    pub(crate) fn new(addr: &Url, options: &Options) -> ConnectingStream {
         match addr.socket_addrs(|| None) {
             Ok(addresses) => {
                 let streams: Vec<_> = addresses

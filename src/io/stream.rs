@@ -55,7 +55,7 @@ impl Stream {
     #[project]
     pub(crate) fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
         #[project]
-        match self.project() {
+            match self.project() {
             Stream::Plain(stream) => stream.poll_read(cx, buf),
             #[cfg(feature = "tls")]
             Stream::Secure(stream) => stream.poll_read(cx, buf),
@@ -65,7 +65,7 @@ impl Stream {
     #[project]
     pub(crate) fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
         #[project]
-        match self.project() {
+            match self.project() {
             Stream::Plain(stream) => stream.poll_write(cx, buf),
             #[cfg(feature = "tls")]
             Stream::Secure(stream) => stream.poll_write(cx, buf),

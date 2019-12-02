@@ -183,6 +183,18 @@ pub struct Options {
     /// Timeout for connection (defaults to `500 ms`)
     pub(crate) connection_timeout: Duration,
 
+    /// Timeout for queries (defaults to `180 sec`)
+    pub(crate) query_timeout: Option<Duration>,
+
+    /// Timeout for each block in a query (defaults to `180 sec`)
+    pub(crate) query_block_timeout: Option<Duration>,
+
+    /// Timeout for inserts (defaults to `180 sec`)
+    pub(crate) insert_timeout: Option<Duration>,
+
+    /// Timeout for execute (defaults to `180 sec`)
+    pub(crate) execute_timeout: Option<Duration>,
+
     /// Enable TLS encryption (defaults to `false`)
     #[cfg(feature = "tls")]
     pub(crate) secure: bool,
@@ -213,6 +225,10 @@ impl Default for Options {
             retry_timeout: Duration::from_secs(5),
             ping_timeout: Duration::from_millis(500),
             connection_timeout: Duration::from_millis(500),
+            query_timeout: Some(Duration::from_secs(180)),
+            query_block_timeout: Some(Duration::from_secs(180)),
+            insert_timeout: Some(Duration::from_secs(180)),
+            execute_timeout: Some(Duration::from_secs(180)),
             #[cfg(feature = "tls")]
             secure: false,
             #[cfg(feature = "tls")]
@@ -323,6 +339,26 @@ impl Options {
         => connection_timeout: Duration
     }
 
+    property! {
+        /// Timeout for query (defaults to `180,000 ms`).
+        => query_timeout: Duration
+    }
+
+    property! {
+        /// Timeout for each block in a query (defaults to `180,000 ms`).
+        => query_block_timeout: Duration
+    }
+
+    property! {
+        /// Timeout for insert (defaults to `180,000 ms`).
+        => insert_timeout: Option<Duration>
+    }
+
+    property! {
+        /// Timeout for execute (defaults to `180 sec`).
+        => execute_timeout: Option<Duration>
+    }
+
     #[cfg(feature = "tls")]
     property! {
         /// Establish secure connection (default is `false`).
@@ -409,6 +445,16 @@ where
             "ping_timeout" => options.ping_timeout = parse_param(key, value, parse_duration)?,
             "connection_timeout" => {
                 options.connection_timeout = parse_param(key, value, parse_duration)?
+            }
+            "query_timeout" => options.query_timeout = parse_param(key, value, parse_opt_duration)?,
+            "query_block_timeout" => {
+                options.query_block_timeout = parse_param(key, value, parse_opt_duration)?
+            }
+            "insert_timeout" => {
+                options.insert_timeout = parse_param(key, value, parse_opt_duration)?
+            }
+            "execute_timeout" => {
+                options.execute_timeout = parse_param(key, value, parse_opt_duration)?
             }
             "compression" => options.compression = parse_param(key, value, parse_compression)?,
             #[cfg(feature = "tls")]
@@ -523,7 +569,7 @@ mod test {
     #[test]
     #[cfg(feature = "tls")]
     fn test_parse_secure_options() {
-        let url = "tcp://username:password@host1:9001/database?ping_timeout=42ms&keepalive=99s&compression=lz4&connection_timeout=10s&secure=true&skip_verify=true";
+        let url = "tcp://username:password@host1:9001/database?ping_timeout=42ms&keepalive=99s&compression=lz4&connection_timeout=10s&secure=true";
         assert_eq!(
             Options {
                 username: "username".into(),
@@ -534,8 +580,6 @@ mod test {
                 ping_timeout: Duration::from_millis(42),
                 connection_timeout: Duration::from_secs(10),
                 compression: true,
-                secure: true,
-                skip_verify: true,
                 ..Options::default()
             },
             from_url(url).unwrap(),

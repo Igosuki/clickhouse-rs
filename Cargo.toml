@@ -14,18 +14,19 @@ edition = "2018"
 exclude = ["tests/*", "examples/*"]
 
 [features]
-tls = ["tokio-tls", "native-tls"]
+default = []
+tls = ["native-tls"]
 
 [dependencies]
 futures-core = "0.3.1"
 futures-util = "0.3.1"
 futures = "0.3.1"
 tokio = { version = "0.2.2", features = ["tcp", "net", "sync", "full", "time"] }
-async-std = "1.2.0"
+async-std = { version = "1.2.0", features = ["unstable"] }
 
 pin-project = "0.4.5"
 
-hostname = "^0.1"
+hostname = "^0.2"
 
 chrono = "0.4"
 chrono-tz = "0.5"
@@ -42,8 +43,7 @@ lazy_static = "1.4.0"
 log = { version = "0.4.8", features = ["std", "serde"] }
 crossbeam = "0.7"
 
-native-tls = { version = "0.2", optional = true }
-tokio-tls = { version = "=0.3.0-alpha.6", optional = true }
+native-tls = { version = "0.2.3", optional = true }
 
 [dev-dependencies]
 env_logger = "^0.6"

@@ -4,12 +4,11 @@ use crate::{
     binary::{Encoder, ReadEx},
     errors::Result,
     types::{
-        ColumnType,
         column::{
             array::ArrayColumnData, BoxColumnWrapper, ColumnWrapper, Either,
             list::List, nullable::NullableColumnData, StringPool,
         },
-        Column, FromSql, SqlType, Value, ValueRef,
+        Column, FromSql, SqlType, Value, ValueRef, ColumnType,
     },
 };
 

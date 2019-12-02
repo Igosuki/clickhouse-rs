@@ -36,6 +36,8 @@ mod row;
 
 const INSERT_BLOCK_SIZE: usize = 1_048_576;
 
+const DEFAULT_CAPACITY: usize = 100;
+
 pub trait ColumnIdx {
     fn get_index<K: ColumnType>(&self, columns: &[Column<K>]) -> Result<usize>;
 }
@@ -73,6 +75,7 @@ sliceable! {
 pub struct Block<K: ColumnType = Simple> {
     info: BlockInfo,
     columns: Vec<Column<K>>,
+    capacity: usize,
 }
 
 impl<L: ColumnType, R: ColumnType> PartialEq<Block<R>> for Block<L> {
@@ -96,6 +99,7 @@ impl<K: ColumnType> Clone for Block<K> {
         Self {
             info: self.info,
             columns: self.columns.iter().map(|c| (*c).clone()).collect(),
+            capacity: self.capacity,
         }
     }
 }
@@ -133,11 +137,21 @@ impl ColumnIdx for String {
 }
 
 impl Block {
-    /// Constructs a new, empty Block.
+    /// Constructs a new, empty `Block`.
     pub fn new() -> Self {
         Self {
             info: Default::default(),
             columns: vec![],
+            capacity: DEFAULT_CAPACITY,
+        }
+    }
+
+    /// Constructs a new, empty `Block` with the specified capacity.
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            info: Default::default(),
+            columns: vec![],
+            capacity,
         }
     }
 
@@ -260,36 +274,14 @@ impl<K: ColumnType> Block<K> {
         let column = &self.columns[column_index];
         Ok(column)
     }
-}
 
-impl Block<Simple> {
-    pub(crate) fn concat(blocks: &[Self]) -> Block<Complex> {
-        let first = blocks.first().expect("blocks should not be empty.");
-
-        for block in blocks {
-            assert_eq!(
-                first.column_count(),
-                block.column_count(),
-                "all columns should have the same size."
-            );
-        }
-
-        let num_columns = first.column_count();
-        let mut columns = Vec::with_capacity(num_columns);
-        for i in 0_usize..num_columns {
-            let chunks = blocks.iter().map(|block| &block.columns[i]);
-            columns.push(Column::concat(chunks));
-        }
-
-        Block {
-            info: first.info,
-            columns,
-        }
+    pub(crate) fn chunks(&self, n: usize) -> ChunkIterator<K> {
+        ChunkIterator::new(n, self)
     }
 }
 
-impl<K: ColumnType> Block<K> {
-    pub(crate) fn cast_to(self, header: &Block<K>) -> Result<Self> {
+impl Block {
+    pub(crate) fn cast_to(self, header: &Block) -> Result<Self> {
         let info = self.info;
         let mut columns = self.columns;
         columns.reverse();
@@ -309,6 +301,7 @@ impl<K: ColumnType> Block<K> {
         Ok(Block {
             info,
             columns: new_columns,
+            capacity: self.capacity,
         })
     }
 
@@ -362,14 +355,35 @@ impl<K: ColumnType> Block<K> {
         }
     }
 
-    pub(crate) fn chunks(&self, n: usize) -> ChunkIterator<K> {
-        ChunkIterator::new(n, self)
+    pub(crate) fn concat(blocks: &[Self]) -> Block<Complex> {
+        let first = blocks.first().expect("blocks should not be empty.");
+
+        for block in blocks {
+            assert_eq!(
+                first.column_count(),
+                block.column_count(),
+                "all block should have the same columns."
+            );
+        }
+
+        let num_columns = first.column_count();
+        let mut columns = Vec::with_capacity(num_columns);
+        for i in 0_usize..num_columns {
+            let chunks = blocks.iter().map(|block| &block.columns[i]);
+            columns.push(Column::concat(chunks));
+        }
+
+        Block {
+            info: first.info,
+            columns,
+            capacity: blocks.iter().map(|b| b.capacity).sum(),
+        }
     }
 }
 
 impl<K: ColumnType> fmt::Debug for Block<K> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let titles: Vec<&str> = self.columns.iter().map(|column| column.name()).collect();
+        let titles: Vec<&str> = self.columns.iter().map(Column::name).collect();
 
         let cells: Vec<_> = self.columns.iter().map(|col| text_cells(&col)).collect();
 

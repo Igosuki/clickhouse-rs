@@ -11,16 +11,16 @@ use crate::{
             decimal::{DecimalAdapter, NullableDecimalAdapter},
             fixed_string::{FixedStringAdapter, NullableFixedStringAdapter},
             string::StringAdapter,
+            iter::Iterable,
         },
-        column::iter::SimpleIterable,
         decimal::NoBits,
         SqlType, Value, ValueRef,
     },
 };
 
-pub(crate) use self::{column_data::ColumnData, string_pool::StringPool};
-pub use self::{concat::ConcatColumnData, numeric::VectorColumnData};
 use self::chunk::ChunkColumnData;
+pub(crate) use self::string_pool::StringPool;
+pub use self::{column_data::ColumnData, concat::ConcatColumnData, numeric::VectorColumnData};
 
 mod array;
 mod chunk;
@@ -30,7 +30,7 @@ mod date;
 mod decimal;
 mod factory;
 pub(crate) mod fixed_string;
-mod iter;
+pub(crate) mod iter;
 mod list;
 mod nullable;
 mod numeric;
@@ -132,51 +132,47 @@ impl Column<Simple> {
             }
         }
     }
+}
 
+impl<K: ColumnType> Column<K> {
     /// Returns an iterator over the column.
     ///
     /// ### Example
     ///
     /// ```rust
+    /// # extern crate clickhouse_rs;
+    /// # extern crate futures;
+    /// # use clickhouse_rs::Pool;
+    /// # use futures::Future;
     /// # use std::env;
-    /// # use clickhouse_rs::{errors::Error, Pool, errors::Result};
-    /// # use futures_util::stream::StreamExt;
-    /// # let rt = tokio::runtime::Runtime::new().unwrap();
-    /// # let ret: Result<()> = rt.block_on(async {
-    /// #     let database_url = "tcp://localhost:9000";
-    /// #     let pool = Pool::new(database_url);
-    /// #     let mut client = pool.get_handle().await?;
-    ///       let mut stream = client
-    ///             .query("SELECT number as n1, number as n2, number as n3 FROM numbers(100000000)")
-    ///             .stream_blocks();
+    /// # let database_url =
+    /// #     env::var("DATABASE_URL").unwrap_or("tcp://localhost:9000?compression=lz4".into());
+    ///   let pool = Pool::new(database_url);
+    ///   let done = pool
+    ///       .get_handle()
+    ///       .and_then(|c| {
+    ///           let sql_query = "SELECT number as n1, number as n2, number as n3 FROM numbers(100)";
+    ///           c.query(sql_query).fold_blocks(0_u64, |mut sum, block| {
     ///
-    ///       let mut sum = 0;
-    ///       while let Some(block) = stream.next().await {
-    ///           let block = block?;
+    ///               let c1 = block.get_column("n1")?.iter::<u64>()?;
+    ///               let c2 = block.get_column("n2")?.iter::<u64>()?;
+    ///               let c3 = block.get_column("n3")?.iter::<u64>()?;
     ///
-    ///           let c1 = block.get_column("n1")?.iter::<u64>()?;
-    ///           let c2 = block.get_column("n2")?.iter::<u64>()?;
-    ///           let c3 = block.get_column("n3")?.iter::<u64>()?;
+    ///               for ((v1, v2), v3) in c1.zip(c2).zip(c3) {
+    ///                   sum += v1 + v2 + v3;
+    ///               }
     ///
-    ///           for ((v1, v2), v3) in c1.zip(c2).zip(c3) {
-    ///               sum = v1 + v2 + v3;
-    ///           }
-    ///       }
-    ///
-    ///       dbg!(sum);
-    /// #     Ok(())
-    /// # });
-    /// # ret.unwrap()
+    ///               Ok(sum)
+    ///           })
+    ///       })
+    ///       .map(|(_, sum)| { dbg!(sum); })
+    ///       .map_err(|err| eprintln!("database error: {}", err));
+    /// # tokio::run(done)
     /// ```
-    pub fn iter<'a, T>(&'a self) -> Result<T::Iter>
-    where
-        T: SimpleIterable<'a>,
-    {
-        T::iter(self, self.sql_type())
+    pub fn iter<'a, T: Iterable<'a, K>>(&'a self) -> Result<T::Iter> {
+        <T as Iterable<'a, K>>::iter(self, self.sql_type())
     }
-}
 
-impl<K: ColumnType> Column<K> {
     pub(crate) fn read<R: ReadEx>(reader: &mut R, size: usize, tz: Tz) -> Result<Column<K>> {
         let name = reader.read_string()?;
         let type_name = reader.read_string()?;

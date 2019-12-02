@@ -44,6 +44,16 @@
 //! - `retry_timeout` - Amount of time to wait before next retry. (defaults to `5 sec`).
 //! - `ping_timeout` - Timeout for ping (defaults to `500 ms`).
 //!
+//! - `query_timeout` - Timeout for queries (defaults to `180 sec`).
+//! - `query_block_timeout` - Timeout for each block in a query (defaults to `180 sec`).
+//! - `insert_timeout` - Timeout for inserts (defaults to `180 sec`).
+//! - `execute_timeout` - Timeout for execute (defaults to `180 sec`).
+//!
+//! SSL/TLS parameters:
+//!
+//! - `secure` - establish secure connection (defaults is `false`).
+//! - `skip_verify` - skip certificate verification (defaults is `false`).
+//!
 //! example:
 //! ```url
 //! tcp://user:password@host:9000/clicks?compression=lz4&ping_timeout=42ms
@@ -78,8 +88,8 @@
 //!         .column("amount",       vec![2_u32,  4,  6,  8, 10])
 //!         .column("account_name", vec![Some("foo"), None, None, None, Some("bar")]);
 //!
-//!     # let database_url = env::var("DATABASE_URL").unwrap_or("tcp://localhost:9000?compression=lz4".into());
-//!     let pool = Pool::new(database_url);
+//!  # let database_url = env::var("DATABASE_URL").unwrap_or("tcp://localhost:9000?compression=lz4".into());
+//!  let pool = Pool::new(database_url);
 //!
 //!     let mut client = pool.get_handle().await?;
 //!     client.execute(ddl).await?;

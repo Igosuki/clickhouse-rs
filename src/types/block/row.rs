@@ -120,3 +120,28 @@ impl<'a, K: ColumnType> Iterator for Rows<'a, K> {
         result
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::{row, types::Block};
+
+    #[test]
+    fn test_len() {
+        let mut block = Block::new();
+        block.push(row!{foo: "bar"}).unwrap();
+
+        for row in block.rows() {
+            assert_eq!(row.len(), 1);
+        }
+    }
+
+    #[test]
+    fn test_is_empty() {
+        let mut block = Block::new();
+        block.push(row!{foo: "bar"}).unwrap();
+
+        for row in block.rows() {
+            assert!(!row.is_empty());
+        }
+    }
+}

@@ -113,10 +113,9 @@ impl ColumnData for ArrayColumnData {
 
 #[cfg(test)]
 mod test {
-    use std::io::Cursor;
-
     use super::*;
-    use crate::{Block, types::Simple};
+    use crate::types::{Block, Simple};
+    use std::io::Cursor;
 
     #[test]
     fn test_write_and_read() {

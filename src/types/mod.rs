@@ -1,7 +1,7 @@
 use std::{borrow::Cow, collections::HashMap, fmt, mem, pin::Pin, sync::Mutex};
 
 use chrono_tz::Tz;
-use hostname::get_hostname;
+use hostname::get;
 
 use lazy_static::lazy_static;
 
@@ -9,7 +9,7 @@ use crate::errors::ServerError;
 
 pub use self::{
     block::{Block, RCons, RNil, Row, RowBuilder, Rows},
-    column::{Column, ColumnType, Simple, Complex},
+    column::{Column, ColumnType, Complex, Simple, iter::Iterable},
     decimal::Decimal,
     from_sql::FromSql,
     options::Options,
@@ -17,6 +17,10 @@ pub use self::{
     query_result::QueryResult,
     value::Value,
 };
+
+#[cfg(feature = "ssl")]
+pub use self::options::Certificate;
+
 pub(crate) use self::{
     cmd::Cmd,
     date_converter::DateConverter,
@@ -26,6 +30,9 @@ pub(crate) use self::{
     unmarshal::Unmarshal,
     value_ref::ValueRef,
 };
+
+#[cfg(feature = "tls")]
+pub use self::options::Certificate;
 
 pub(crate) mod column;
 mod marshal;
@@ -45,6 +52,8 @@ pub(crate) mod query_result;
 
 mod decimal;
 mod options;
+
+pub(crate) mod either;
 
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
 pub(crate) struct Progress {
@@ -114,7 +123,7 @@ impl Default for Context {
     fn default() -> Self {
         Self {
             server_info: ServerInfo::default(),
-            hostname: get_hostname().unwrap(),
+            hostname: get().unwrap().into_string().unwrap(),
             options: OptionsSource::default(),
         }
     }

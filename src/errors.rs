@@ -1,9 +1,13 @@
-use std::{borrow::Cow, io, result, str::Utf8Error, string::FromUtf8Error};
+use std::{borrow::Cow, io, mem, result, str::Utf8Error, string::FromUtf8Error};
 
 use failure::*;
 #[cfg(feature = "tokio_io")]
 use tokio::timer::timeout::Elapsed;
 use url::ParseError;
+use log::warn;
+use std::task::Poll;
+use crate::types::Packet;
+use tokio::time::Elapsed;
 
 /// Result type alias for this library.
 pub type Result<T> = result::Result<T, Error>;
@@ -180,7 +184,6 @@ impl From<FromUtf8Error> for Error {
     }
 }
 
-#[cfg(feature = "tokio_io")]
 impl From<Elapsed> for Error {
     fn from(_err: Elapsed) -> Self {
         Error::Driver(DriverError::Timeout)
@@ -190,6 +193,30 @@ impl From<Elapsed> for Error {
 impl From<ParseError> for Error {
     fn from(err: ParseError) -> Self {
         Error::Url(UrlError::Parse(err))
+    }
+}
+
+impl From<Utf8Error> for Error {
+    fn from(err: Utf8Error) -> Self {
+        Error::Driver(DriverError::Utf8Error(err))
+    }
+}
+
+impl<S> Into<Poll<Result<Packet<S>>>> for Error {
+    fn into(self) -> Poll<Result<Packet<S>>> {
+        let mut this = self;
+
+        if let Error::Io(ref mut e) = &mut this {
+            if e.kind() == io::ErrorKind::WouldBlock {
+                return Poll::Pending;
+            }
+
+            let me = mem::replace(e, io::Error::from(io::ErrorKind::Other));
+            return Poll::Ready(Err(Error::Io(me)));
+        }
+
+        warn!("ERROR: {:?}", this);
+        Poll::Ready(Err(this))
     }
 }
 
@@ -205,12 +232,6 @@ impl From<Error> for io::Error {
 impl From<Error> for Box<dyn std::error::Error> {
     fn from(err: Error) -> Self {
         Box::<dyn std::error::Error>::from(err.to_string())
-    }
-}
-
-impl From<Utf8Error> for Error {
-    fn from(err: Utf8Error) -> Self {
-        Error::Driver(DriverError::Utf8Error(err))
     }
 }
 

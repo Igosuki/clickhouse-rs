@@ -280,6 +280,7 @@ mod test {
     use std::{
         str::FromStr,
         sync::{
+            atomic::{AtomicBool, AtomicUsize, Ordering},
             Arc,
             atomic::{AtomicBool, Ordering},
         },
@@ -406,32 +407,115 @@ mod test {
         }
     }
 
-    #[tokio::test]
-    async fn test_wrong_insert() -> Result<()> {
-        let pool = Pool::new(DATABASE_URL.as_str());
-        {
-            let block = Block::new();
-            let mut c = pool.get_handle().await?;
-            c.insert("unexisting", block).await.unwrap_err();
-        }
+    #[test]
+    fn test_query_timeout() {
+        let url = format!("{}{}", DATABASE_URL.as_str(), "&query_timeout=10ms");
+        let pool = Pool::new(url);
+
+        let done = pool
+            .get_handle()
+            .and_then(|c| c.query("SELECT sleep(10)").fetch_all());
+
+        run(done).unwrap_err();
+
         let info = pool.info();
         assert_eq!(info.ongoing, 0);
         assert_eq!(info.tasks_len, 0);
         assert_eq!(info.idle_len, 0);
-        Ok(())
     }
 
-    #[tokio::test]
-    async fn test_wrong_execute() -> Result<()> {
-        let pool = Pool::new(DATABASE_URL.as_str());
-        {
-            let mut c = pool.get_handle().await?;
-            c.execute("DROP TABLE unexisting").await.unwrap_err();
-        }
+    #[test]
+    fn test_query_stream_timeout() {
+        let url = format!("{}{}", DATABASE_URL.as_str(), "&query_block_timeout=10ms");
+        let pool = Pool::new(url);
+
+        let done = pool
+            .get_handle()
+            .and_then(|c| {
+                c.query("SELECT sleep(10)")
+                    .stream_blocks()
+                    .for_each(|block| {
+                        println!("{:?}\nblock counts: {} rows", block, block.row_count());
+                        Ok(())
+                    })
+            });
+
+        run(done).unwrap_err();
+
         let info = pool.info();
         assert_eq!(info.ongoing, 0);
         assert_eq!(info.tasks_len, 0);
         assert_eq!(info.idle_len, 0);
-        Ok(())
+    }
+
+    #[test]
+    fn test_wrong_insert() {
+        let pool = Pool::new(DATABASE_URL.as_str());
+
+        let done = pool.get_handle().and_then(|c| {
+            let block = Block::new();
+            c.insert("unexisting", block)
+        });
+
+        run(done).unwrap_err();
+
+        let info = pool.info();
+        assert_eq!(info.ongoing, 0);
+        assert_eq!(info.tasks_len, 0);
+        assert_eq!(info.idle_len, 0);
+    }
+
+    #[test]
+    fn test_wrong_execute() {
+        let pool = Pool::new(DATABASE_URL.as_str());
+
+        let done = pool
+            .get_handle()
+            .and_then(|c| c.execute("DROP TABLE unexisting"));
+
+        run(done).unwrap_err();
+
+        let info = pool.info();
+        assert_eq!(info.ongoing, 0);
+        assert_eq!(info.tasks_len, 0);
+        assert_eq!(info.idle_len, 0);
+    }
+
+    #[test]
+    fn test_wrong_ping() {
+        let counter = Arc::new(AtomicUsize::new(0));
+
+        let url = format!("{}{}", DATABASE_URL.as_str(), "&query_block_timeout=10ms");
+        let pool = Pool::new(url);
+
+        for i in 0..4 {
+            let counter = counter.clone();
+            let done = pool
+                .get_handle()
+                .and_then(move |c| c.ping())
+                .and_then(move |_|{
+                    counter.fetch_add(1, Ordering::Relaxed);
+                    Ok(())
+                })
+                .map_err(|err| eprintln!("database error: {}", err));
+
+            if i % 2 == 0 {
+                run(done).unwrap();
+
+                let info = pool.info();
+                assert_eq!(info.ongoing, 0);
+                assert_eq!(info.tasks_len, 0);
+                assert_eq!(info.idle_len, 1);
+            } else {
+                run(done).unwrap_err();
+
+                let info = pool.info();
+                assert_eq!(info.ongoing, 0);
+                assert_eq!(info.tasks_len, 0);
+                assert_eq!(info.idle_len, 0);
+            }
+        }
+
+        assert_eq!(2, counter.load(Ordering::Acquire))
     }
 }

@@ -1,23 +1,37 @@
-use std::{marker::PhantomData, sync::Arc};
+use std::{marker::{PhantomData}, sync::Arc};
 
 use futures_core::stream::BoxStream;
 use futures_util::{
     future,
-    stream::{self, StreamExt},
+    stream::{StreamExt},
     TryStreamExt,
 };
+use async_std::stream;
+//use async_std::prelude::*;
+
 use log::info;
 
 use crate::{
     errors::Result,
     types::{
-        block::BlockRef, query_result::stream_blocks::BlockStream, Block, Cmd, Query, Row,
-        Rows, Complex, Simple
+        block::BlockRef, query_result::stream_blocks::BlockStream, Block, Cmd,
+        Complex, Query, Row, Rows, Simple,
     },
     ClientHandle,
 };
 
+
+mod fold_block;
 pub(crate) mod stream_blocks;
+
+macro_rules! try_opt_stream {
+    ($expr:expr) => {
+        match $expr {
+            Ok(val) => val,
+            Err(err) => return Box::pin(stream::once(Err(err))),
+        }
+    };
+}
 
 /// Result of a query or statement execution.
 pub struct QueryResult<'a> {
@@ -71,6 +85,8 @@ impl<'a> QueryResult<'a> {
     /// ```
     pub fn stream_blocks(self) -> BoxStream<'a, Result<Block>> {
         let query = self.query.clone();
+        // TODO: Fix stream ext integration with async-std to return a timeouteable stream
+        let _timeout = try_opt_stream!(self.client.context.options.get()).query_block_timeout;
 
         self.client
             .wrap_stream::<'a, _>(move |c: &'a mut ClientHandle| {
@@ -85,7 +101,13 @@ impl<'a> QueryResult<'a> {
                     .unwrap()
                     .call(Cmd::SendQuery(query, context));
 
-                BlockStream::<'a>::new(c, inner)
+                let bs = BlockStream::<'a>::new(c, inner);
+//                if let Some(timeout) = timeout {
+//                    bs.timeout(timeout)
+//                } else {
+//                    bs
+//                }
+                bs
             })
     }
 
@@ -100,7 +122,7 @@ impl<'a> QueryResult<'a> {
                             let block_ref = BlockRef::Owned(block);
 
                             Box::pin(
-                                stream::iter(Rows {
+                                stream::from_iter(Rows {
                                     row: 0,
                                     block_ref,
                                     kind: PhantomData,
@@ -108,7 +130,7 @@ impl<'a> QueryResult<'a> {
                                 .map(|row| -> Result<Row<'static, Simple>> { Ok(row) }),
                             )
                         }
-                        Err(err) => Box::pin(stream::once(future::err(err))),
+                        Err(err) => Box::pin(stream::once(Err(err))),
                     };
                     result
                 })
