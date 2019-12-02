@@ -2,6 +2,7 @@ use std::{convert, fmt, str, sync::Arc};
 
 use chrono::prelude::*;
 use chrono_tz::Tz;
+use uuid::Uuid;
 
 use crate::{
     errors::{Error, FromSqlError, Result},
@@ -12,6 +13,7 @@ use crate::{
         SqlType, Value,
     },
 };
+use std::ops::Deref;
 
 #[derive(Clone, Debug)]
 pub enum ValueRef<'a> {
@@ -31,6 +33,7 @@ pub enum ValueRef<'a> {
     Nullable(Either<&'static SqlType, Box<ValueRef<'a>>>),
     Array(&'static SqlType, Arc<Vec<ValueRef<'a>>>),
     Decimal(Decimal),
+    Uuid([u8; 16]),
 }
 
 impl<'a> PartialEq for ValueRef<'a> {
@@ -109,6 +112,7 @@ impl<'a> fmt::Display for ValueRef<'a> {
                 write!(f, "[{}]", cells.join(", "))
             }
             ValueRef::Decimal(v) => fmt::Display::fmt(v, f),
+            ValueRef::Uuid(v) => fmt::Display::fmt(&Uuid::from_bytes(*v.deref()), f),
         }
     }
 }
@@ -135,6 +139,7 @@ impl<'a> convert::From<ValueRef<'a>> for SqlType {
             },
             ValueRef::Array(t, _) => SqlType::Array(t),
             ValueRef::Decimal(v) => SqlType::Decimal(v.precision, v.scale),
+            ValueRef::Uuid(_) => SqlType::Uuid,
         }
     }
 }
@@ -200,6 +205,7 @@ impl<'a> From<ValueRef<'a>> for Value {
                 Value::Array(t, Arc::new(value_list))
             }
             ValueRef::Decimal(v) => Value::Decimal(v),
+            ValueRef::Uuid(v) => Value::Uuid(v),
         }
     }
 }
@@ -275,6 +281,7 @@ impl<'a> From<&'a Value> for ValueRef<'a> {
                 ValueRef::Array(*t, Arc::new(ref_vec))
             }
             Value::Decimal(v) => ValueRef::Decimal(v.clone()),
+            Value::Uuid(v) => ValueRef::Uuid(*v)
         }
     }
 }

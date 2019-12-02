@@ -42,6 +42,7 @@ failure = "^0.1.5"
 failure_derive = "^0.1.5"
 url="^2"
 lazy_static = "1.4.0"
+uuid = "0.8.1"
 
 log = { version = "0.4.8", features = ["std", "serde"] }
 crossbeam = "0.7"

@@ -2,12 +2,14 @@ use std::{convert, fmt, mem, str, sync::Arc};
 
 use chrono::prelude::*;
 use chrono_tz::Tz;
+use uuid::Uuid;
 
 use crate::types::{
     column::Either,
     decimal::{Decimal, NoBits},
     DateConverter, SqlType,
 };
+use std::ops::Deref;
 
 pub(crate) type AppDateTime = DateTime<Tz>;
 pub(crate) type AppDate = Date<Tz>;
@@ -31,6 +33,7 @@ pub enum Value {
     Nullable(Either<&'static SqlType, Box<Value>>),
     Array(&'static SqlType, Arc<Vec<Value>>),
     Decimal(Decimal),
+    Uuid([u8; 16]),
 }
 
 impl PartialEq for Value {
@@ -90,6 +93,7 @@ impl Value {
                 scale,
                 nobits: NoBits::N64,
             }),
+            SqlType::Uuid => Value::Uuid([0; 16])
         }
     }
 }
@@ -138,6 +142,7 @@ impl fmt::Display for Value {
                 write!(f, "[{}]", cells.join(", "))
             }
             Value::Decimal(v) => fmt::Display::fmt(v, f),
+            Value::Uuid(ref v) => fmt::Display::fmt(&Uuid::from_bytes(*v.deref()), f),
         }
     }
 }
@@ -167,6 +172,7 @@ impl convert::From<Value> for SqlType {
             },
             Value::Array(t, _) => SqlType::Array(t),
             Value::Decimal(v) => SqlType::Decimal(v.precision, v.scale),
+            Value::Uuid(_) => SqlType::Uuid,
         }
     }
 }

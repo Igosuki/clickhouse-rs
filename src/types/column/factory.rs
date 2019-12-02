@@ -7,7 +7,7 @@ use crate::{
         array::ArrayColumnData, column_data::ColumnData, date::DateColumnData,
         decimal::DecimalColumnData, fixed_string::FixedStringColumnData, list::List,
         nullable::NullableColumnData, numeric::VectorColumnData, string::StringColumnData,
-        BoxColumnWrapper, ColumnWrapper,
+        BoxColumnWrapper, ColumnWrapper, uuid::{UuidColumnData, UUID_LEN},
     },
     types::decimal::NoBits,
     SqlType,
@@ -99,7 +99,8 @@ impl dyn ColumnData {
                     scale,
                     nobits,
                 })
-            }
+            },
+            SqlType::Uuid => W::wrap(UuidColumnData::with_capacity(capacity))
         })
     }
 }
