@@ -1,10 +1,11 @@
 extern crate clickhouse_rs;
 extern crate futures;
-
 use std::env;
 
+mod util;
+
 #[cfg(feature = "tls")]
-fn main() {
+async fn main(database_url: String) -> Result<(), Box<dyn Error>> {
     use futures::Future;
     use clickhouse_rs::Pool;
 
@@ -12,20 +13,15 @@ fn main() {
     env_logger::init();
 
     let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| {
-        "tcp://localhost:9440?secure=true&skip_verify=true".into()
+        util::DATABASE_URL.into()
     });
     let pool = Pool::new(database_url);
 
-    let done = pool
-        .get_handle()
-        .and_then(move |c| c.query("SELECT 1 AS Value").fetch_all())
-        .and_then(move |(_, block)| {
-            println!("{:?}", block);
-            Ok(())
-        })
-        .map_err(|err| eprintln!("database error: {}", err));
+    let done = pool.get_handle().await?;
+    c.query("SELECT 1 AS Value").fetch_all();
+    println!("{:?}", block);
 
-    tokio::run(done)
+    Ok(())
 }
 
 #[cfg(not(feature = "tls"))]
@@ -35,3 +31,5 @@ fn main() {
 
     panic!("Required ssl feature (cargo run --example tls --features tls)")
 }
+
+

@@ -14,8 +14,10 @@ edition = "2018"
 exclude = ["tests/*", "examples/*"]
 
 [features]
-default = []
+default = ["async_std"]
 tls = ["native-tls"]
+async_std = []
+tokio_io = []
 
 [dependencies]
 futures-core = "0.3.1"

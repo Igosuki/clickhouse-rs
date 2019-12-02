@@ -1,6 +1,7 @@
 use std::{env, error::Error};
 use clickhouse_rs::{row, types::Block, Pool};
 use futures_util::StreamExt;
+mod util;
 
 async fn execute(database_url: String) -> Result<(), Box<dyn Error>> {
     env::set_var("RUST_LOG", "clickhouse_rs=debug");
@@ -38,20 +39,11 @@ async fn execute(database_url: String) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-#[cfg(all(feature = "tokio_io", not(feature = "tls")))]
+#[cfg(all(feature = "tokio_io"))]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let database_url =
-        env::var("DATABASE_URL").unwrap_or_else(|_| "tcp://localhost:9000?compression=lz4".into());
-    execute(database_url).await
-}
-
-#[cfg(all(feature = "tokio_io", feature = "tls"))]
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| {
-        "tcp://localhost:9440?secure=true&skip_verify=true".into()
-    });
+        env::var("DATABASE_URL").unwrap_or_else(|_| util::DATABASE_URL.into());
     execute(database_url).await
 }
 
@@ -62,3 +54,4 @@ fn main() {
         env::var("DATABASE_URL").unwrap_or_else(|_| "tcp://localhost:9000?compression=lz4".into());
     task::block_on(execute(database_url)).unwrap();
 }
+

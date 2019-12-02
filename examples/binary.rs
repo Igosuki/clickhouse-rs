@@ -4,8 +4,9 @@ extern crate futures;
 use std::env;
 
 use clickhouse_rs::{types::Block, Pool};
-use futures::Future;
 use std::error::Error;
+
+pub mod util;
 
 async fn execute(database_url: String) -> Result<(), Box<dyn Error>> {
     let ddl = "
@@ -22,14 +23,12 @@ async fn execute(database_url: String) -> Result<(), Box<dyn Error>> {
         .column("opt_text", vec![Some(vec![0, 159, 146, 150]), None])
         .column("fx_opt_text", vec![None, Some(vec![0, 159, 146, 150])]);
 
-    let database_url =
-        env::var("DATABASE_URL").unwrap_or_else(|_| "tcp://localhost:9000?compression=lz4".into());
     let pool = Pool::new(database_url);
 
-    let c = pool.get_handle();
-    c.execute(ddl);
-    c.insert("test_blob", block);
-    c.query("SELECT text, fx_text, opt_text, fx_opt_text FROM test_blob").fetch_all();
+    let mut c = pool.get_handle().await?;
+    c.execute(ddl).await?;
+    c.insert("test_blob", block).await?;
+    let block = c.query("SELECT text, fx_text, opt_text, fx_opt_text FROM test_blob").fetch_all().await?;
     for row in block.rows() {
         let text: &[u8] = row.get("text")?;
         let fx_text: &[u8] = row.get("fx_text")?;
@@ -44,20 +43,11 @@ async fn execute(database_url: String) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-#[cfg(all(feature = "tokio_io", not(feature = "tls")))]
+#[cfg(all(feature = "tokio_io"))]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let database_url =
-        env::var("DATABASE_URL").unwrap_or_else(|_| "tcp://localhost:9000?compression=lz4".into());
-    execute(database_url).await
-}
-
-#[cfg(all(feature = "tokio_io", feature = "tls"))]
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| {
-        "tcp://localhost:9440?secure=true&skip_verify=true".into()
-    });
+        env::var("DATABASE_URL").unwrap_or_else(|_| util::DATABASE_URL.into());
     execute(database_url).await
 }
 
@@ -65,6 +55,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 fn main() {
     use async_std::task;
     let database_url =
-        env::var("DATABASE_URL").unwrap_or_else(|_| "tcp://localhost:9000?compression=lz4".into());
+        env::var("DATABASE_URL").unwrap_or_else(|_| util::DATABASE_URL.into());
     task::block_on(execute(database_url)).unwrap();
 }
+
